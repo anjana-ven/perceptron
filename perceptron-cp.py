@@ -6,6 +6,7 @@ import torch
 from torch.nn import *
 from torch import nn
 import torch.optim as optim
+from torchmetrics import R2Score
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -25,11 +26,12 @@ print(device)
 # Set training variables
 
 batch_size = 16
-learning_rate = 0.01
-momentum = 1
-training_epochs = 1000
-lossfn = "MSELoss"
-decay_rate = 1e-7
+learning_rate = 0.001
+momentum_rate = 0.9
+training_epochs = 50
+optimizerfn = "Adam" # SGD or Adam
+lossfn = "MSELoss" # MSELoss, L1Loss (MAE)
+decay_rate = 1e-8
 dataset = "costpd.csv"
 
 
@@ -54,7 +56,7 @@ class MyDataset(Dataset):
 
 class MLP(torch.nn.Module):
 
-  def __init__(self, num_features, dim_hidden, numExtraLayers=3, outputdim=1):
+  def __init__(self, num_features, dim_hidden, numExtraLayers=10, outputdim=1):
     super().__init__()
 
     self.outputdim = outputdim
@@ -116,6 +118,8 @@ def validate(model, lossfxn, loader, e):
   model.eval()
   with torch.no_grad():
     total_loss = 0
+    #total_r2 = 0
+    #r2score = R2Score()
     # classInfoDict = {}
     for batch_idx, (data, target) in enumerate(loader):
       data = data.to(device)
@@ -125,10 +129,14 @@ def validate(model, lossfxn, loader, e):
       output = model(data)
       # pdb.set_trace()
       loss = lossfxn(output, target)
+      pdb.set_trace()
+      #total_r2 += r2score(output[:, 0],target)
       # pdb.set_trace()
       total_loss += loss.item()*len(data)
     avgValLoss = total_loss/len(loader.dataset)
+    #avgR2 = total_r2/len(loader.dataset)
     print('Train Epoch: %s - Avg. Validation Loss : %f' % (e, avgValLoss))
+    #print('R2 value is: %s' % (avgR2))
 
     return avgValLoss
 
@@ -137,7 +145,7 @@ def train():
 
   data = MyDataset(dataset)
 
-  dataTrain, dataVal = random_split(data, [0.7, 0.3])
+  dataTrain, dataVal = random_split(data, [0.90, 0.10])
 
   train_loader = DataLoader(
     dataset=dataTrain, batch_size=batch_size, shuffle=True)
@@ -145,11 +153,14 @@ def train():
   val_loader = DataLoader(
     dataset=dataVal, batch_size=batch_size, shuffle=True)
 
-  model = MLP(num_features=data.numDataFeatures(), dim_hidden=50).to(device)
-  lossfxn = globals()[lossfn]()
+  model = MLP(num_features=data.numDataFeatures(), dim_hidden=100).to(device)
+  lossfxn = globals()[lossfn]() # MSEloss()
 
   # pdb.set_trace()
-  optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay_rate)
+  if (optimizerfn == "Adam"):
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay_rate)
+  elif (optimizerfn == "SGD"):
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=decay_rate, momentum=momentum_rate)
   train_loss = []
   val_loss = []
 
